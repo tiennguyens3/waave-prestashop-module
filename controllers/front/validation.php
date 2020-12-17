@@ -34,52 +34,87 @@ class Waave_PgValidationModuleFrontController extends ModuleFrontController
      */
     public function postProcess()
     {
-        $cart = $this->context->cart;
-        if ($cart->id_customer == 0 || $cart->id_address_delivery == 0 || $cart->id_address_invoice == 0 || !$this->module->active) {
-            Tools::redirect('index.php?controller=order&step=1');
+        $cartId = (int)Tools::getValue('id_cart');
+        $row = DB::getInstance()->getRow('SELECT * FROM ' . _DB_PREFIX_ . 'cart WHERE id_cart = ' . $cartId);
+
+        if ($row['id_customer'] == 0 || $row['id_address_delivery'] == 0 || $row['id_address_invoice'] == 0 || !$this->module->active) {
+            header("HTTP/1.0 404 Not Found");
+            die($this->module->l('Error, cart not found.', 'validation'));
         }
 
-        // Check that this payment option is still available in case the customer changed his address just before the end of the checkout process
-        $authorized = false;
-        foreach (Module::getPaymentModules() as $module) {
-            if ($module['name'] == 'waave_pg') {
-                $authorized = true;
-                break;
-            }
+        $cart = new Cart($cartId);
+
+        $customer = new Customer($cart->id_customer);
+        if (!Validate::isLoadedObject($customer)) {
+            header("HTTP/1.0 404 Not Found");
+            die($this->module->l('Error, customer not found.', 'validation'));
         }
 
-        if (!$authorized) {
-            die($this->module->l('This payment method is not available.', 'validation'));
-        }
+        PrestaShopLogger::addLog('Waave - process return url', 1, null, 'Waave');
+        PrestaShopLogger::addLog('Validate order', 1, null, 'Waave');
 
-        $accessKey = Configuration::get('ACCESS_KEY');
-        $venueId = Configuration::get('VENUE_ID');
+        $json = file_get_contents('php://input');
+        $data = json_decode($json, true);
 
         $request = [
             'id_cart' => $cart->id,
             'id_module' => $this->module->id,
             'key' => $this->context->customer->secure_key
         ];
-        $returnUrl = $this->context->link->getPageLink('order-confirmation', true, null, $request);
+        $callbackUrl = $this->context->link->getModuleLink($this->module->name, 'validation', $request, true);
 
-        $amount = $cart->getOrderTotal(true, Cart::BOTH);
-        $referenceId = $cart->id;
+        $valid = $this->validateSignature($data, $callbackUrl);
+        if (!$valid) {
+            header("HTTP/1.0 500 Error");
+            die('Error, signature is invalid.');
+        }
 
-        // $customer = new Customer($cart->id_customer);
-        // if (!Validate::isLoadedObject($customer))
-        //     Tools::redirect('index.php?controller=order&step=1');
+        $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
+        if ($total != $data['amount']) {
+            header("HTTP/1.0 500 Error");
+            die('Error, amount is invalid.');
+        }
 
-        // $currency = $this->context->currency;
-        // $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
-        // $mailVars = array(
-        //     '{bankwire_owner}' => Configuration::get('BANK_WIRE_OWNER'),
-        //     '{bankwire_details}' => nl2br(Configuration::get('BANK_WIRE_DETAILS')),
-        //     '{bankwire_address}' => nl2br(Configuration::get('BANK_WIRE_ADDRESS'))
-        // );
+        $currency = $this->context->currency;
+        $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
 
-        // $this->module->validateOrder($cart->id, Configuration::get('PS_OS_BANKWIRE'), $total, $this->module->displayName, NULL, $mailVars, (int)$currency->id, false, $customer->secure_key);
-        // Tools::redirect('index.php?controller=order-confirmation&id_cart='.$cart->id.'&id_module='.$this->module->id.'&id_order='.$this->module->currentOrder.'&key='.$customer->secure_key);
+        $valid = $this->module->validateOrder($cart->id, Configuration::get('PS_OS_BANKWIRE'), $total, $this->module->displayName, NULL, [], (int)$currency->id, false, $customer->secure_key);
+
+        if (!$valid) {
+            header("HTTP/1.0 500 Error");
+            die('Error, order is invalid.');
+        }
+
+        $status = $data['status'];
+
+        PrestaShopLogger::addLog('Waave - request validation is done', 1, null, 'Waave');
 
         die('OK-PRESTASHOP');
+    }
+
+    /**
+     * Validate signature
+     * 
+     * @param array $data
+     */
+    private function validateSignature($data, $uri) {
+        $secretKey = Configuration::get('PRIVATE_KEY');
+        $body      = json_encode($data);
+
+        $signature       = hash("sha256", $secretKey . $uri . $body);
+        $headerSignature = isset($_SERVER['HTTP_X_API_SIGNATURE']) ? $_SERVER['HTTP_X_API_SIGNATURE'] : '';
+
+        if ($signature === $headerSignature) {
+            PrestaShopLogger::addLog('Signature is valid.', 1, null, 'Waave');
+            return true;
+        }
+
+        PrestaShopLogger::addLog('Signature is invalid.', 1, null, 'Waave');
+        PrestaShopLogger::addLog('Signature: ' . $signature, 1, null, 'Waave');
+        PrestaShopLogger::addLog('Secret key: ' . $secretKey, 1, null, 'Waave');
+        PrestaShopLogger::addLog('Uri: ' . $uri, 1, null, 'Waave');
+        PrestaShopLogger::addLog('Body: ' . $body, 1, null, 'Waave');
+
+        return false;
     }
 }

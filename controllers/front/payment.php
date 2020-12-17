@@ -64,15 +64,14 @@ class Waave_PgPaymentModuleFrontController extends ModuleFrontController
         $accessKey = Configuration::get('ACCESS_KEY');
         $venueId = Configuration::get('VENUE_ID');
 
-        $cancelUrl = $this->context->link->getPageLink('order', true, null, ['step' => 3]);
-        $callbackUrl = $this->context->link->getModuleLink($this->module->name, 'validation', array(), true);
-
         $request = [
             'id_cart' => $cart->id,
             'id_module' => $this->module->id,
             'key' => $this->context->customer->secure_key
         ];
         $returnUrl = $this->context->link->getPageLink('order-confirmation', true, null, $request);
+        $callbackUrl = $this->context->link->getModuleLink($this->module->name, 'validation', $request, true);
+        $cancelUrl = $this->context->link->getPageLink('order', true, null, ['step' => 3]);
 
         $amount = $cart->getOrderTotal(true, Cart::BOTH);
         $referenceId = $cart->id;
