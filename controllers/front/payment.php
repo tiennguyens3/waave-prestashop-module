@@ -27,8 +27,11 @@
 /**
  * @since 1.5.0
  */
-class Waave_PgValidationModuleFrontController extends ModuleFrontController
+class Waave_PgPaymentModuleFrontController extends ModuleFrontController
 {
+    const PROD_URL = 'https://pg.getwaave.co/waavepay/checkout';
+    const SANDBOX_URL = 'https://staging-pg.getwaave.co/waavepay/checkout';
+
     /**
      * @see FrontController::postProcess()
      */
@@ -52,8 +55,17 @@ class Waave_PgValidationModuleFrontController extends ModuleFrontController
             die($this->module->l('This payment method is not available.', 'validation'));
         }
 
+        $waaveSandbox   = Configuration::get('WAAVE_SANDBOX');
+        $actionUrl = self::PROD_URL;
+        if ($waaveSandbox) {
+            $actionUrl = self::SANDBOX_URL;
+        }
+
         $accessKey = Configuration::get('ACCESS_KEY');
         $venueId = Configuration::get('VENUE_ID');
+
+        $cancelUrl = $this->context->link->getPageLink('order', true, null, ['step' => 3]);
+        $callbackUrl = $this->context->link->getModuleLink($this->module->name, 'validation', array(), true);
 
         $request = [
             'id_cart' => $cart->id,
@@ -65,21 +77,20 @@ class Waave_PgValidationModuleFrontController extends ModuleFrontController
         $amount = $cart->getOrderTotal(true, Cart::BOTH);
         $referenceId = $cart->id;
 
-        // $customer = new Customer($cart->id_customer);
-        // if (!Validate::isLoadedObject($customer))
-        //     Tools::redirect('index.php?controller=order&step=1');
+        $this->addJqueryPlugin('fancybox');
+        $this->registerJavascript(sha1('modules/waave_pg/views/js/waave_pg.js'), 'modules/waave_pg/views/js/waave_pg.js', ['priority' => 100]);
 
-        // $currency = $this->context->currency;
-        // $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
-        // $mailVars = array(
-        //     '{bankwire_owner}' => Configuration::get('BANK_WIRE_OWNER'),
-        //     '{bankwire_details}' => nl2br(Configuration::get('BANK_WIRE_DETAILS')),
-        //     '{bankwire_address}' => nl2br(Configuration::get('BANK_WIRE_ADDRESS'))
-        // );
+        $this->context->smarty->assign([
+            'accessKey' => $accessKey,
+            'venueId' => $venueId,
+            'referenceId' => $referenceId,
+            'amount' => $amount,
+            'cancelUrl' => $cancelUrl,
+            'returnUrl' => $returnUrl,
+            'callbackUrl' => $callbackUrl,
+            'actionUrl' => $actionUrl
+        ]);
 
-        // $this->module->validateOrder($cart->id, Configuration::get('PS_OS_BANKWIRE'), $total, $this->module->displayName, NULL, $mailVars, (int)$currency->id, false, $customer->secure_key);
-        // Tools::redirect('index.php?controller=order-confirmation&id_cart='.$cart->id.'&id_module='.$this->module->id.'&id_order='.$this->module->currentOrder.'&key='.$customer->secure_key);
-
-        die('OK-PRESTASHOP');
+        $this->setTemplate('module:waave_pg/views/templates/front/payment_return.tpl');
     }
 }

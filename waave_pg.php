@@ -47,7 +47,7 @@ class Waave_Pg extends PaymentModule
         $this->version = '1.0.0';
         $this->ps_versions_compliancy = array('min' => '1.7', 'max' => _PS_VERSION_);
         $this->author = 'Waave';
-        $this->controllers = array('validation');
+        $this->controllers = array('validation', 'payment');
         $this->is_eu_compatible = 1;
 
         $this->currencies = true;
@@ -108,16 +108,7 @@ class Waave_Pg extends PaymentModule
     public function getExternalPaymentOption()
     {
         $externalOption = new PaymentOption();
-        $externalOption->setCallToActionText($this->l('Waave Payment'))
-                       ->setAction($this->context->link->getModuleLink($this->name, 'validation', array(), true))
-                       ->setInputs([
-                            'token' => [
-                                'name' =>'token',
-                                'type' =>'hidden',
-                                'value' =>'12345689',
-                            ],
-                        ])
-                       ->setAdditionalInformation($this->l('WAAVE Checkout (Debit Cards / Credit Cards).'))
+        $externalOption->setAction($this->context->link->getModuleLink($this->name, 'payment', array(), true))
                        ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/payment.png'));
 
         return $externalOption;
