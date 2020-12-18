@@ -43,6 +43,7 @@ class Waave_PgValidationModuleFrontController extends ModuleFrontController
         }
 
         $cart = new Cart($cartId);
+        $this->context->cart = $cart;
 
         $customer = new Customer($cart->id_customer);
         if (!Validate::isLoadedObject($customer)) {
@@ -50,17 +51,23 @@ class Waave_PgValidationModuleFrontController extends ModuleFrontController
             die($this->module->l('Error, customer not found.', 'validation'));
         }
 
-        PrestaShopLogger::addLog('Waave - process return url', 1, null, 'Waave');
-        PrestaShopLogger::addLog('Validate order', 1, null, 'Waave');
+        PrestaShopLogger::addLog('Waave - process return url', 1, null, null, null, true);
+        PrestaShopLogger::addLog('Validate order', 1, null, null, null, true);
 
         $json = file_get_contents('php://input');
         $data = json_decode($json, true);
 
-        $request = [
+        if ($data['reference_id'] != $cart->id) {
+            header("HTTP/1.0 404 Not Found");
+            die($this->module->l('Error, response data is invalid.', 'validation'));
+        }
+
+        $request = array(
             'id_cart' => $cart->id,
             'id_module' => $this->module->id,
-            'key' => $this->context->customer->secure_key
-        ];
+            'key' => $customer->secure_key
+        );
+
         $callbackUrl = $this->context->link->getModuleLink($this->module->name, 'validation', $request, true);
 
         $valid = $this->validateSignature($data, $callbackUrl);
@@ -76,18 +83,25 @@ class Waave_PgValidationModuleFrontController extends ModuleFrontController
         }
 
         $currency = $this->context->currency;
-        $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
 
-        $valid = $this->module->validateOrder($cart->id, Configuration::get('PS_OS_BANKWIRE'), $total, $this->module->displayName, NULL, [], (int)$currency->id, false, $customer->secure_key);
+        $status = $data['status'];
+        $orderState = Configuration::get('PS_OS_ERROR');
+        if ( 'completed' === $status ) {
+            $orderState = Configuration::get('PS_OS_PAYMENT');
+        } elseif ( 'pending' === $status ) {
+            $orderState = Configuration::get('PS_OS_CHEQUE');
+        } elseif ( 'cancelled' === $status ) {
+            $orderState = Configuration::get('PS_OS_CANCELED');
+        }
+
+        $valid = $this->module->validateOrder($cart->id, $orderState, $total, $this->module->displayName, NULL, [], (int)$currency->id, false, $customer->secure_key);
 
         if (!$valid) {
             header("HTTP/1.0 500 Error");
             die('Error, order is invalid.');
         }
 
-        $status = $data['status'];
-
-        PrestaShopLogger::addLog('Waave - request validation is done', 1, null, 'Waave');
+        PrestaShopLogger::addLog('Waave - request validation is done', 1, null, null, null, true);
 
         die('OK-PRESTASHOP');
     }
@@ -105,15 +119,15 @@ class Waave_PgValidationModuleFrontController extends ModuleFrontController
         $headerSignature = isset($_SERVER['HTTP_X_API_SIGNATURE']) ? $_SERVER['HTTP_X_API_SIGNATURE'] : '';
 
         if ($signature === $headerSignature) {
-            PrestaShopLogger::addLog('Signature is valid.', 1, null, 'Waave');
+            PrestaShopLogger::addLog('Signature is valid.');
             return true;
         }
 
-        PrestaShopLogger::addLog('Signature is invalid.', 1, null, 'Waave');
-        PrestaShopLogger::addLog('Signature: ' . $signature, 1, null, 'Waave');
-        PrestaShopLogger::addLog('Secret key: ' . $secretKey, 1, null, 'Waave');
-        PrestaShopLogger::addLog('Uri: ' . $uri, 1, null, 'Waave');
-        PrestaShopLogger::addLog('Body: ' . $body, 1, null, 'Waave');
+        PrestaShopLogger::addLog('Signature is invalid.', 1, null, null, null, true);
+        PrestaShopLogger::addLog('Signature: ' . $signature, 1, null, null, null, true);
+        PrestaShopLogger::addLog('Secret key: ' . $secretKey, 1, null, null, null, true);
+        PrestaShopLogger::addLog('Uri: ' . $uri, 1, null, null, null, true);
+        PrestaShopLogger::addLog('Body: ' . $body, 1, null, null, null, true);
 
         return false;
     }

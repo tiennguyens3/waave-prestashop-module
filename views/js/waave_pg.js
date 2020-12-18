@@ -10,7 +10,7 @@ jQuery(document).ready(function () {
             }
         },
         afterShow: function() {
-            jQuery( "#waave_payment_form" ).submit();
+            jQuery("#waave_payment_form").submit();
         }
     });
 });

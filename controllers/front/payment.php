@@ -64,11 +64,11 @@ class Waave_PgPaymentModuleFrontController extends ModuleFrontController
         $accessKey = Configuration::get('ACCESS_KEY');
         $venueId = Configuration::get('VENUE_ID');
 
-        $request = [
+        $request = array(
             'id_cart' => $cart->id,
             'id_module' => $this->module->id,
             'key' => $this->context->customer->secure_key
-        ];
+        );
         $returnUrl = $this->context->link->getPageLink('order-confirmation', true, null, $request);
         $callbackUrl = $this->context->link->getModuleLink($this->module->name, 'validation', $request, true);
         $cancelUrl = $this->context->link->getPageLink('order', true, null, ['step' => 3]);
@@ -79,7 +79,7 @@ class Waave_PgPaymentModuleFrontController extends ModuleFrontController
         $this->addJqueryPlugin('fancybox');
         $this->registerJavascript(sha1('modules/waave_pg/views/js/waave_pg.js'), 'modules/waave_pg/views/js/waave_pg.js', ['priority' => 100]);
 
-        $this->context->smarty->assign([
+        $vars = array(
             'accessKey' => $accessKey,
             'venueId' => $venueId,
             'referenceId' => $referenceId,
@@ -88,7 +88,12 @@ class Waave_PgPaymentModuleFrontController extends ModuleFrontController
             'returnUrl' => $returnUrl,
             'callbackUrl' => $callbackUrl,
             'actionUrl' => $actionUrl
-        ]);
+        );
+
+        PrestaShopLogger::addLog('Waave - Begin checkout', 1, null, null, null, true);
+        PrestaShopLogger::addLog('Data: ' . json_encode($vars), 1, null, null, null, true);
+
+        $this->context->smarty->assign($vars);
 
         $this->setTemplate('module:waave_pg/views/templates/front/payment_return.tpl');
     }
