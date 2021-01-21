@@ -109,7 +109,8 @@ class Waave_Pg extends PaymentModule
     {
         $externalOption = new PaymentOption();
         $externalOption->setAction($this->context->link->getModuleLink($this->name, 'payment', array(), true))
-                       ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/payment.png'));
+                       ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/payment.png'))
+                       ->setAdditionalInformation($this->context->smarty->fetch('module:waave_pg/views/templates/front/payment_infos.tpl'));
 
         return $externalOption;
     }
